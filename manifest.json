@@ -1,9 +1,9 @@
 {
 	"id": "daily-note-pinner",
 	"name": "Daily Note Pinner",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
-	"description": "Obsidian Plugin that keeps the Daily Note of the day pinned and all Daily Notes from the past or the future unpinned.",
+	"description": "Pins the Daily Note of the present day. Unpinns all Daily Notes of past and future days.",
 	"author": "LukeMT",
 	"authorUrl": "https://github.com/lukemt/",
 	"fundingUrl": "https://github.com/lukemt/",
