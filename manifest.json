@@ -1,7 +1,7 @@
 {
 	"id": "daily-note-pinner",
 	"name": "Daily Note Pinner",
-	"version": "1.0.1",
+	"version": "1.1.0",
 	"minAppVersion": "0.15.0",
 	"description": "Pins the Daily Note of the present day. Unpinns all Daily Notes of past and future days.",
 	"author": "LukeMT",
