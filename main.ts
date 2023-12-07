@@ -1,30 +1,125 @@
-import { Plugin, FileView } from 'obsidian';
+import {
+	Plugin,
+	FileView,
+	TFile,
+	WorkspaceLeaf,
+	normalizePath,
+} from "obsidian";
 
-const dateRegex = /\d{4}-\d{2}-\d{2}/;
+const DN_CONFIG_PATH = normalizePath(".obsidian/daily-notes.json");
+const DEFAULT_FORMAT = "YYYY-MM-DD";
+
+interface DailyNote {
+	name: string;
+	folder?: string;
+	leaf?: WorkspaceLeaf;
+}
+
+interface SavedData {
+	lastPinName: string;
+}
 
 export default class DailyNotePinnerPlugin extends Plugin {
-	async onload() {
-		this.registerEvent(
-			this.app.workspace.on("file-open", this.pinDailyNote)
-		);
-		this.pinDailyNote();
+	savedData: SavedData;
+	dailyNote: DailyNote;
+
+	async readDnConfig() {
+		const dnConfigExists =
+			await this.app.vault.adapter.exists(DN_CONFIG_PATH);
+
+		if (dnConfigExists) {
+			const dnConfig = JSON.parse(
+				await this.app.vault.adapter.read(DN_CONFIG_PATH),
+			);
+
+			if (dnConfig.format) {
+				this.dailyNote.name = moment().format(dnConfig.format);
+			}
+
+			if (dnConfig.folder) {
+				this.dailyNote.folder = dnConfig.folder;
+			}
+		}
 	}
 
-	pinDailyNote = () => {
-		const date = new Date();
-		const year = date.getFullYear();
-		const month = String(date.getMonth() + 1).padStart(2, '0');
-		const day = String(date.getDate()).padStart(2, '0');
-		const today = `${year}-${month}-${day}`;
+	getNotePath(): string {
+		let notePath = `${this.dailyNote.name}.md`;
+		if (this.dailyNote.folder) {
+			notePath = `${this.dailyNote.folder}/${notePath}`;
+		}
+		return notePath;
+	}
 
-		this.app.workspace.iterateRootLeaves(leaf => {
-			if (leaf.view instanceof FileView && dateRegex.test(leaf.view.file?.basename ?? "")) {
-				const shouldBePinned = leaf.view.file?.basename === today;
-				// @ts-ignore
-				if (leaf.pinned !== shouldBePinned) {
-					leaf.setPinned(shouldBePinned);
-				}
+	async pinCmd() {
+		const notePath = this.getNotePath();
+		let noteFile;
+
+		if (await this.app.vault.adapter.exists(notePath, true)) {
+			noteFile = this.app.vault.getAbstractFileByPath(notePath);
+		} else {
+			noteFile = await this.app.vault.create(notePath, "");
+		}
+
+		if (noteFile instanceof TFile) {
+			const leaf = this.app.workspace.getLeaf("tab");
+			await leaf.openFile(noteFile);
+			leaf.setPinned(true);
+		}
+	}
+
+	async setPinStatusOf(baseName: string, toPin: boolean) {
+		this.app.workspace.iterateRootLeaves((leaf) => {
+			if (
+				leaf.view instanceof FileView &&
+				leaf.view.file?.basename === baseName
+			) {
+				sleep(0).then(async () => {
+					leaf.setPinned(toPin);
+					this.savedData.lastPinName = baseName;
+					await this.saveData(this.savedData);
+				});
 			}
-		})
+		});
+	}
+
+	async closeLeavesOf(baseName: string) {
+		this.app.workspace.iterateRootLeaves((leaf) => {
+			if (
+				leaf.view instanceof FileView &&
+				leaf.view.file?.basename === baseName
+			) {
+				sleep(0).then(() => leaf.detach());
+			}
+		});
+	}
+
+	async onload() {
+		this.dailyNote = {
+			name: moment().format(DEFAULT_FORMAT),
+		};
+
+		this.savedData = {
+			lastPinName: moment().subtract("1", "days").format(DEFAULT_FORMAT),
+		};
+
+		this.savedData = Object.assign(this.savedData, await this.loadData());
+		await this.readDnConfig();
+
+		this.app.workspace.onLayoutReady(async () => {
+			await this.closeLeavesOf(this.savedData.lastPinName);
+			// required for propagation
+			sleep(0).then(
+				async () =>
+					await this.setPinStatusOf(this.dailyNote.name, true),
+			);
+		});
+
+		this.addCommand({
+			id: "pin-daily-note",
+			name: "Pin Daily Note",
+			callback: async () => {
+				await this.pinCmd();
+			},
+		});
 	}
 }
